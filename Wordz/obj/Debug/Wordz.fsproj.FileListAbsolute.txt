@@ -1,0 +1,8 @@
+C:\Code\FSharp\Wordz\Wordz\bin\Debug\Wordz.exe.config
+C:\Code\FSharp\Wordz\Wordz\bin\Debug\Wordz.XML
+C:\Code\FSharp\Wordz\Wordz\bin\Debug\Wordz.exe
+C:\Code\FSharp\Wordz\Wordz\bin\Debug\Wordz.pdb
+C:\Code\FSharp\Wordz\Wordz\bin\Debug\FSharp.Core.dll
+C:\Code\FSharp\Wordz\Wordz\bin\Debug\FSharp.Core.xml
+C:\Code\FSharp\Wordz\Wordz\obj\Debug\Wordz.exe
+C:\Code\FSharp\Wordz\Wordz\obj\Debug\Wordz.pdb
