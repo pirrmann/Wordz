@@ -53,21 +53,34 @@ type Boundaries = {
     NextInvalidBottom: int[,]
     NextFreeBottom: int[,] }
 
-let getBoundaries (forbiddenPixels:bool[,]) =
-    let rec walk isInRange last start current = seq {
-        if current > last then
-            for x in start .. current - 1 do
-                yield x, current
-        elif isInRange current then
-            // all previous that were not in range map to current
-            for x in start .. current do
-                yield x, current
-            // then move to the next
-            yield! walk isInRange last (current + 1) (current + 1)
-        else // let's look further !
-            yield! walk isInRange last start (current + 1)
+let groupConsecutive input = seq {
+        let mutable currentGroup : option<int * int * _>  = None
+        for elem in input do
+            match currentGroup with
+            | None ->
+                currentGroup <- Some (0, 1, elem)
+            | Some (start, n, value) ->
+                if value = elem then
+                    currentGroup <- Some (start, n+1, value)
+                else
+                    yield start, n, value
+                    currentGroup <- Some (start+n, 1, elem)
+
+        match currentGroup with
+        | None -> ()
+        | Some g -> yield g
     }
 
+let indexesOfNextTrueAndFalse length repetitions = seq {
+    for (start, count, value) in repetitions do
+        for i in start..start+count-1 do
+            if value then
+                yield (i, start+count)
+            else
+                yield (start+count, i)
+    }
+
+let getBoundaries (forbiddenPixels:bool[,]) =
     let width = forbiddenPixels.GetLength(0)
     let height = forbiddenPixels.GetLength(1)
 
@@ -80,20 +93,26 @@ let getBoundaries (forbiddenPixels:bool[,]) =
     let nextInvalidBottom = Array2D.zeroCreate width height
 
     for y in 0 .. lastY do
-        let canUse current = not(forbiddenPixels.[current, y])
+        let nextTrueAndFalseOnLine =
+            seq { for x in 0..lastX do yield forbiddenPixels.[x, y] }
+            |> groupConsecutive
+            |> indexesOfNextTrueAndFalse width
+            |> Seq.mapi (fun i value -> i, value)
 
-        for x, right in walk canUse lastX 0 0 do
-            nextFreeRight.[x,y] <- right
-        for x, right in walk (not << canUse) lastX 0 0 do
-            nextInvalidRight.[x,y] <- right
+        for x, (nextTrue, nextFalse) in nextTrueAndFalseOnLine do
+            nextFreeRight.[x,y] <- nextFalse
+            nextInvalidRight.[x,y] <- nextTrue
 
     for x in 0 .. lastX do
-        let canUse current = not(forbiddenPixels.[x, current])
+        let nextTrueAndFalseOnColumn =
+            seq { for y in 0..lastY do yield forbiddenPixels.[x, y] }
+            |> groupConsecutive
+            |> indexesOfNextTrueAndFalse width
+            |> Seq.mapi (fun i value -> i, value)
 
-        for y, bottom in walk canUse lastY 0 0 do
-            nextFreeBottom.[x,y] <- bottom
-        for y, bottom in walk (not << canUse) lastY 0 0 do
-            nextInvalidBottom.[x,y] <- bottom
+        for y, (nextTrue, nextFalse) in nextTrueAndFalseOnColumn do
+            nextFreeBottom.[x,y] <- nextFalse
+            nextInvalidBottom.[x,y] <- nextTrue
 
     {
         Width = width
