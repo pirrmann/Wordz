@@ -136,11 +136,14 @@ let canFit boundaries (width, height) (x, y)  =
 type AddingState = {
      ForbiddenPixels: bool[,]
      WordsSpots: Spot list
-     ConsecutiveFailuresCount: int
+     RemainingWords: (string * TextCandidate list) list
+     NextIterationWords: (string * TextCandidate list) list
 }
 
-let addWord (targetColors: Color[,]) (state:AddingState) (index, word, textCandidates: TextCandidate list) =
-    printfn "Word %d: %s" index word
+let addWord (targetColors: Color[,]) (state:AddingState) =
+    let word, textCandidates = state.RemainingWords.Head
+
+    printfn "Word %s" word
 
     let watch = System.Diagnostics.Stopwatch.StartNew()
 
@@ -182,28 +185,40 @@ let addWord (targetColors: Color[,]) (state:AddingState) (index, word, textCandi
                 for y in 0 .. spot.TextCandidate.Height - 1 do
                     state.ForbiddenPixels.[spot.X + x, spot.Y + y] <- state.ForbiddenPixels.[spot.X + x, spot.Y + y] || spot.TextCandidate.Pixels.[x, y]
 
+            let remainingCandidates = textCandidates |> List.skipWhile (fun c -> c <> spot.TextCandidate)
+
             {
                 ForbiddenPixels = state.ForbiddenPixels
                 WordsSpots = spot :: state.WordsSpots
-                ConsecutiveFailuresCount = 0
+                RemainingWords = state.RemainingWords.Tail
+                NextIterationWords = (word, remainingCandidates) :: state.NextIterationWords
             }
+
         | None ->
             printfn "No spot found :("
-            { state with ConsecutiveFailuresCount = state.ConsecutiveFailuresCount + 1 }
+            { state with RemainingWords = state.RemainingWords.Tail }
 
     printfn "Elapsed time in seconds: %f" watch.Elapsed.TotalSeconds
 
     newState
 
-let addWords targetColors state words =
-    let stateWithWordsAdded =
-        words
-        |> Seq.scan (addWord targetColors) state
-        |> Seq.takeWhile (fun s -> s.ConsecutiveFailuresCount < 10)
-        |> Seq.last
-    { stateWithWordsAdded with ConsecutiveFailuresCount = 0 }
+let rand =
+    let r = new System.Random(42)
+    fun () -> r.NextDouble()
 
-let generate (inputFolder:string, outputFolder:string) (inputFile, wordSets) =
+let rec addWords targetColors (state:AddingState) =
+    match state.RemainingWords, state.NextIterationWords with
+    | [], [] -> state
+    | [], nextIterationWords ->
+        let remainingWords = nextIterationWords |> List.sortBy (fun _ -> rand())
+        let state' = { state with RemainingWords = remainingWords
+                                  NextIterationWords = [] }
+        addWords targetColors state'
+    | _ ->
+        let state' = addWord targetColors state
+        addWords targetColors state'
+
+let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
 
     let target = Bitmap.FromFile(inputFolder + inputFile) :?> Bitmap
     let targetColors = getColors target
@@ -214,10 +229,11 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, wordSets) =
             {
                 ForbiddenPixels = Array2D.init target.Width target.Height (fun x y -> targetColors.[x, y].A < 15uy)
                 WordsSpots = []
-                ConsecutiveFailuresCount = 0
+                RemainingWords = []
+                NextIterationWords = words
             }
 
-        let finalState = wordSets |> Seq.fold (addWords targetColors) startingState
+        let finalState = addWords targetColors startingState
 
         let result = new Bitmap(target.Width, target.Height)
         use g = Graphics.FromImage result
