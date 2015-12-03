@@ -20,8 +20,10 @@ let readWordsFromFile filePath =
     System.IO.File.ReadAllLines(filePath) |> Seq.toList
 
 let rand =
-    let r = new System.Random()
+    let r = new System.Random(42)
     fun () -> r.NextDouble()
+
+let fontSizes = [32 .. -4 .. 24] @ [22 .. -2 .. 12] @ [11 .. -1 .. 6]
 
 let makeInfiniteWordSeq wordsToUse =
     let rec repeatShuffled words = seq {
@@ -29,7 +31,7 @@ let makeInfiniteWordSeq wordsToUse =
         yield! repeatShuffled words
     }
     repeatShuffled wordsToUse
-    |> Seq.mapi (fun id word -> id, word)
+    |> Seq.mapi (fun id word -> id, word, Logic.buildTestCandidates word fontSizes)
 
 //let words = coolWords |> List.mapi (fun id word -> id, word)
 
@@ -39,8 +41,8 @@ let outputFolder = @"C:\Code\"
 
 let inputFiles =
     [
-        "bobby-layer-1.png"
-        //"bobby-layer-2.png"
+        //"bobby-layer-1.png"
+        "bobby-layer-2.png"
         //"bobby-layer-3.png"
         //"bobby-layer-4.png"
         //"bobby-layer-5.png"
@@ -49,10 +51,9 @@ let inputFiles =
 
 let wordSets =
     [
-        //readWordsFromFile @"C:\Users\Pierre\Pictures\LevisIdeas\words.txt" |> makeInfiniteWordSeq
+        readWordsFromFile @"C:\Users\Pierre\Pictures\LevisIdeas\words.txt" |> makeInfiniteWordSeq |> Seq.take 10
         //[ "ITG"; "bob" ] |> makeInfiniteWordSeq
         //[ "€"; "$"; "£" ] |> makeInfiniteWordSeq
-        [ 1, "a" ]
     ]
 
 [<EntryPoint>]

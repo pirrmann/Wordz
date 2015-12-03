@@ -3,17 +3,46 @@
 open System.Drawing
 open System.Drawing.Imaging
     
-let fontSizes = [32 .. -4 .. 24] @ [22 .. -2 .. 10] @ [11 .. -1 .. 6]
-
 let getColors (bitmap:Bitmap) =
     Array2D.init bitmap.Width bitmap.Height (fun x y -> bitmap.GetPixel(x, y))
 
+type TextCandidate = {
+    Text: string
+    FontSize: int
+    Width: int
+    Height: int
+    Pixels: bool[,]
+}
+
+let getFont size = new Font("Arial", float32 size)
+
+let buildTestCandidates word fontSizes =
+    use bit = new Bitmap(1, 1)
+    use measureGraphics = bit |> Graphics.FromImage
+    measureGraphics.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
+
+    let buildTestCandidate fontSize =
+        use font = getFont fontSize
+        let size = measureGraphics.MeasureString(word, font)
+        let width, height = int size.Width, int size.Height
+        use bitmap = new Bitmap(width, height)
+        use g = bitmap |> Graphics.FromImage
+        g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
+        g.DrawString(word, font, Brushes.Black, 0.f, 0.f)
+        {
+            Text = word
+            FontSize = fontSize
+            Width = width
+            Height = height
+            Pixels = Array2D.init width height (fun x y -> bitmap.GetPixel(x, y).A > 15uy)
+        }
+
+    fontSizes |> List.map buildTestCandidate
+    
 type Spot = {
     X:int
     Y:int
-    FontSize:int
-    Width:int
-    Height:int
+    TextCandidate: TextCandidate
 }
 
 type Boundaries = {
@@ -24,7 +53,7 @@ type Boundaries = {
     NextInvalidBottom: int[,]
     NextFreeBottom: int[,] }
 
-let getBoundaries (targetColors:Color[,]) (drawnPixels:Color[,]) =
+let getBoundaries (forbiddenPixels:bool[,]) =
     let rec walk isInRange last start current = seq {
         if current > last then
             for x in start .. current - 1 do
@@ -34,13 +63,13 @@ let getBoundaries (targetColors:Color[,]) (drawnPixels:Color[,]) =
             for x in start .. current do
                 yield x, current
             // then move to the next
-            yield! walk isInRange last (current+1) (current + 1)
+            yield! walk isInRange last (current + 1) (current + 1)
         else // let's look further !
             yield! walk isInRange last start (current + 1)
     }
 
-    let width = targetColors.GetLength(0)
-    let height = targetColors.GetLength(1)
+    let width = forbiddenPixels.GetLength(0)
+    let height = forbiddenPixels.GetLength(1)
 
     let lastX = width - 1
     let lastY = height - 1
@@ -51,9 +80,7 @@ let getBoundaries (targetColors:Color[,]) (drawnPixels:Color[,]) =
     let nextInvalidBottom = Array2D.zeroCreate width height
 
     for y in 0 .. lastY do
-        let canUse current =
-            targetColors.[current, y].A > 15uy
-            && drawnPixels.[current, y].A < 15uy
+        let canUse current = not(forbiddenPixels.[current, y])
 
         for x, right in walk canUse lastX 0 0 do
             nextFreeRight.[x,y] <- right
@@ -61,9 +88,7 @@ let getBoundaries (targetColors:Color[,]) (drawnPixels:Color[,]) =
             nextInvalidRight.[x,y] <- right
 
     for x in 0 .. lastX do
-        let canUse current =
-            targetColors.[x, current].A > 15uy
-            && drawnPixels.[x, current].A < 15uy
+        let canUse current = not(forbiddenPixels.[x, current])
 
         for y, bottom in walk canUse lastY 0 0 do
             nextFreeBottom.[x,y] <- bottom
@@ -108,26 +133,18 @@ let canFit boundaries (width, height) (x, y)  =
     else
         Fits
 
-let getFont size = new Font("Arial", float32 size)
-
 type AddingState = {
-     Image: Bitmap
+     ForbiddenPixels: bool[,]
+     WordsSpots: Spot list
      ConsecutiveFailuresCount: int
 }
 
-let addWord (targetColors: Color[,]) (state:AddingState) (index, word) =
+let addWord (targetColors: Color[,]) (state:AddingState) (index, word, textCandidates: TextCandidate list) =
     printfn "Word %d: %s" index word
 
     let watch = System.Diagnostics.Stopwatch.StartNew()
 
-    let drawnPixels = state.Image |> getColors 
-
-    printfn "Elapsed time in seconds: %f" watch.Elapsed.TotalSeconds
-
-    use g = state.Image |> Graphics.FromImage
-    g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
-
-    let boundaries = getBoundaries targetColors drawnPixels
+    let boundaries = getBoundaries state.ForbiddenPixels
 
     printfn "Elapsed time in seconds: %f" watch.Elapsed.TotalSeconds
 
@@ -142,46 +159,41 @@ let addWord (targetColors: Color[,]) (state:AddingState) (index, word) =
                 findSpot (width, height) (nextX, y)
 
     let spots = seq {
-        for fontSize in fontSizes do
-            use font = getFont fontSize
-            let wordToDraw = word
-            let size = g.MeasureString(wordToDraw, font)
-            let width, height = int size.Width, int size.Height
+        for textCandidate in textCandidates do
 
-            match findSpot (width, height) (0, 0) with
+            match findSpot (textCandidate.Width, textCandidate.Height) (0, 0) with
             | Some (x, y) ->
                 yield {
                     X = x
                     Y = y
-                    FontSize = fontSize
-                    Width = width
-                    Height = height
+                    TextCandidate = textCandidate
                 }
             | None -> ()
         }
 
     let bestSpot = spots |> Seq.tryHead
-         
-    let consecutiveFailuresCount =
+    
+    let newState =
         match bestSpot with
         | Some spot ->
-            printfn "Found a spot! %A, size %d" (spot.X, spot.Y) spot.FontSize
-            let middle = targetColors.[spot.X + spot.Width / 2, spot.Y + spot.Height / 2]
-            let colorToUse = middle //Color.White
-            use font = getFont spot.FontSize
-            use brush = new SolidBrush(colorToUse)
-            g.DrawString(word, font, brush, float32 spot.X, float32 spot.Y)
-            0
+            printfn "Found a spot! %A, size %d" (spot.X, spot.Y) spot.TextCandidate.FontSize
+
+            for x in 0 .. spot.TextCandidate.Width - 1 do
+                for y in 0 .. spot.TextCandidate.Height - 1 do
+                    state.ForbiddenPixels.[spot.X + x, spot.Y + y] <- state.ForbiddenPixels.[spot.X + x, spot.Y + y] || spot.TextCandidate.Pixels.[x, y]
+
+            {
+                ForbiddenPixels = state.ForbiddenPixels
+                WordsSpots = spot :: state.WordsSpots
+                ConsecutiveFailuresCount = 0
+            }
         | None ->
             printfn "No spot found :("
-            state.ConsecutiveFailuresCount + 1
+            { state with ConsecutiveFailuresCount = state.ConsecutiveFailuresCount + 1 }
 
     printfn "Elapsed time in seconds: %f" watch.Elapsed.TotalSeconds
 
-    {
-        Image = state.Image
-        ConsecutiveFailuresCount = consecutiveFailuresCount
-    }
+    newState
 
 let addWords targetColors state words =
     let stateWithWordsAdded =
@@ -189,7 +201,7 @@ let addWords targetColors state words =
         |> Seq.scan (addWord targetColors) state
         |> Seq.takeWhile (fun s -> s.ConsecutiveFailuresCount < 10)
         |> Seq.last
-    { state with ConsecutiveFailuresCount = 0 }
+    { stateWithWordsAdded with ConsecutiveFailuresCount = 0 }
 
 let generate (inputFolder:string, outputFolder:string) (inputFile, wordSets) =
 
@@ -200,14 +212,23 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, wordSets) =
     let result =
         let startingState =
             {
-                Image = empty
+                ForbiddenPixels = Array2D.init target.Width target.Height (fun x y -> targetColors.[x, y].A < 15uy)
+                WordsSpots = []
                 ConsecutiveFailuresCount = 0
             }
 
-        let wordsLayer = wordSets |> Seq.fold (addWords targetColors) startingState
+        let finalState = wordSets |> Seq.fold (addWords targetColors) startingState
+
         let result = new Bitmap(target.Width, target.Height)
         use g = Graphics.FromImage result
-        g.DrawImage(wordsLayer.Image, 0.f, 0.f)
+        g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
+        for spot in finalState.WordsSpots do
+            let color = targetColors.[spot.X + spot.TextCandidate.Width / 2, spot.Y + spot.TextCandidate.Height / 2]
+            use font = getFont spot.TextCandidate.FontSize
+            use brush = new SolidBrush(color)
+            printfn "drawing text %s" spot.TextCandidate.Text
+            g.DrawString(spot.TextCandidate.Text, font, brush, single spot.X, single spot.Y)
+
         result
 
     result.Save(outputFolder + inputFile, ImageFormat.Png)
