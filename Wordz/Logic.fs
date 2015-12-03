@@ -71,7 +71,7 @@ let groupConsecutive input = seq {
         | Some g -> yield g
     }
 
-let indexesOfNextTrueAndFalse length repetitions = seq {
+let indexesOfNextTrueAndFalse repetitions = seq {
     for (start, count, value) in repetitions do
         for i in start..start+count-1 do
             if value then
@@ -80,39 +80,39 @@ let indexesOfNextTrueAndFalse length repetitions = seq {
                 yield (start+count, i)
     }
 
-let getBoundaries (forbiddenPixels:bool[,]) =
+let updateBoundaries (forbiddenPixels:bool[,]) ((minX, maxX), (minY, maxY)) boundaries =
+    for y in minY .. maxY do
+        let nextTrueAndFalseOnLine =
+            seq { for x in 0 .. boundaries.Width - 1 do yield forbiddenPixels.[x, y] }
+            |> groupConsecutive
+            |> indexesOfNextTrueAndFalse
+            |> Seq.mapi (fun i value -> i, value)
+
+        for x, (nextTrue, nextFalse) in nextTrueAndFalseOnLine do
+            boundaries.NextFreeRight.[x,y] <- nextFalse
+            boundaries.NextInvalidRight.[x,y] <- nextTrue
+
+    for x in minX .. maxX do
+        let nextTrueAndFalseOnColumn =
+            seq { for y in 0 .. boundaries.Height - 1 do yield forbiddenPixels.[x, y] }
+            |> groupConsecutive
+            |> indexesOfNextTrueAndFalse
+            |> Seq.mapi (fun i value -> i, value)
+
+        for y, (nextTrue, nextFalse) in nextTrueAndFalseOnColumn do
+            boundaries.NextFreeBottom.[x,y] <- nextFalse
+            boundaries.NextInvalidBottom.[x,y] <- nextTrue
+
+    boundaries
+
+let getBoundaries (forbiddenPixels:bool[,]) = 
     let width = forbiddenPixels.GetLength(0)
     let height = forbiddenPixels.GetLength(1)
-
-    let lastX = width - 1
-    let lastY = height - 1
 
     let nextFreeRight = Array2D.zeroCreate width height
     let nextInvalidRight = Array2D.zeroCreate width height
     let nextFreeBottom = Array2D.zeroCreate width height
     let nextInvalidBottom = Array2D.zeroCreate width height
-
-    for y in 0 .. lastY do
-        let nextTrueAndFalseOnLine =
-            seq { for x in 0..lastX do yield forbiddenPixels.[x, y] }
-            |> groupConsecutive
-            |> indexesOfNextTrueAndFalse width
-            |> Seq.mapi (fun i value -> i, value)
-
-        for x, (nextTrue, nextFalse) in nextTrueAndFalseOnLine do
-            nextFreeRight.[x,y] <- nextFalse
-            nextInvalidRight.[x,y] <- nextTrue
-
-    for x in 0 .. lastX do
-        let nextTrueAndFalseOnColumn =
-            seq { for y in 0..lastY do yield forbiddenPixels.[x, y] }
-            |> groupConsecutive
-            |> indexesOfNextTrueAndFalse width
-            |> Seq.mapi (fun i value -> i, value)
-
-        for y, (nextTrue, nextFalse) in nextTrueAndFalseOnColumn do
-            nextFreeBottom.[x,y] <- nextFalse
-            nextInvalidBottom.[x,y] <- nextTrue
 
     {
         Width = width
@@ -121,7 +121,7 @@ let getBoundaries (forbiddenPixels:bool[,]) =
         NextInvalidRight = nextInvalidRight
         NextFreeBottom = nextFreeBottom
         NextInvalidBottom = nextInvalidBottom
-    }
+    } |> updateBoundaries forbiddenPixels ((0, width - 1), (0, height - 1))
 
 type FitResult =
     | Fits
@@ -154,6 +154,7 @@ let canFit boundaries (width, height) (x, y)  =
 
 type AddingState = {
      ForbiddenPixels: bool[,]
+     Boundaries: Boundaries
      WordsSpots: Spot list
      RemainingWords: (string * TextCandidate list) list
      NextIterationWords: (string * TextCandidate list) list
@@ -162,13 +163,7 @@ type AddingState = {
 let addWord (targetColors: Color[,]) (state:AddingState) =
     let word, textCandidates = state.RemainingWords.Head
 
-    printfn "Word %s" word
-
-    let watch = System.Diagnostics.Stopwatch.StartNew()
-
-    let boundaries = getBoundaries state.ForbiddenPixels
-
-    printfn "Elapsed time in seconds: %f" watch.Elapsed.TotalSeconds
+    let boundaries = state.Boundaries
 
     let rec findSpot (width, height) (x, y) =
         if y >= boundaries.Height then None
@@ -194,30 +189,27 @@ let addWord (targetColors: Color[,]) (state:AddingState) =
         }
 
     let bestSpot = spots |> Seq.tryHead
-    
+
     let newState =
         match bestSpot with
         | Some spot ->
-            printfn "Found a spot! %A, size %d" (spot.X, spot.Y) spot.TextCandidate.FontSize
-
             for x in 0 .. spot.TextCandidate.Width - 1 do
                 for y in 0 .. spot.TextCandidate.Height - 1 do
                     state.ForbiddenPixels.[spot.X + x, spot.Y + y] <- state.ForbiddenPixels.[spot.X + x, spot.Y + y] || spot.TextCandidate.Pixels.[x, y]
 
             let remainingCandidates = textCandidates |> List.skipWhile (fun c -> c <> spot.TextCandidate)
+            let updatedBoundaries = state.Boundaries |> updateBoundaries state.ForbiddenPixels ((spot.X, spot.X + spot.TextCandidate.Width - 1), (spot.Y, spot.Y + spot.TextCandidate.Height - 1))
 
             {
                 ForbiddenPixels = state.ForbiddenPixels
+                Boundaries = updatedBoundaries
                 WordsSpots = spot :: state.WordsSpots
                 RemainingWords = state.RemainingWords.Tail
                 NextIterationWords = (word, remainingCandidates) :: state.NextIterationWords
             }
 
         | None ->
-            printfn "No spot found :("
             { state with RemainingWords = state.RemainingWords.Tail }
-
-    printfn "Elapsed time in seconds: %f" watch.Elapsed.TotalSeconds
 
     newState
 
@@ -244,9 +236,11 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
     let empty = new Bitmap(target.Width, target.Height)
 
     let result =
+        let forbiddenPixels = Array2D.init target.Width target.Height (fun x y -> targetColors.[x, y].A < 15uy)
         let startingState =
             {
-                ForbiddenPixels = Array2D.init target.Width target.Height (fun x y -> targetColors.[x, y].A < 15uy)
+                ForbiddenPixels = forbiddenPixels
+                Boundaries = getBoundaries forbiddenPixels
                 WordsSpots = []
                 RemainingWords = []
                 NextIterationWords = words
@@ -261,7 +255,6 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
             let color = targetColors.[spot.X + spot.TextCandidate.Width / 2, spot.Y + spot.TextCandidate.Height / 2]
             use font = getFont spot.TextCandidate.FontSize
             use brush = new SolidBrush(color)
-            printfn "drawing text %s" spot.TextCandidate.Text
             g.DrawString(spot.TextCandidate.Text, font, brush, single spot.X, single spot.Y)
 
         result
