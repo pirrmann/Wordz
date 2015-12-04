@@ -11,6 +11,7 @@ type TextCandidate = {
     FontSize: int
     Width: int
     Height: int
+    Offset: int * int
     Pixels: bool[,]
 }
 
@@ -21,7 +22,7 @@ let buildTestCandidates word fontSizes =
     use measureGraphics = bit |> Graphics.FromImage
     measureGraphics.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
 
-    let buildTestCandidate fontSize =
+    let buildTestCandidate margin fontSize =
         use font = getFont fontSize
         let size = measureGraphics.MeasureString(word, font)
         let width, height = int size.Width, int size.Height
@@ -29,15 +30,51 @@ let buildTestCandidates word fontSizes =
         use g = bitmap |> Graphics.FromImage
         g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
         g.DrawString(word, font, Brushes.Black, 0.f, 0.f)
+
+        let pixels = Array2D.init width height (fun x y -> bitmap.GetPixel(x, y).A > 15uy)
+
+        let keepMargin margin whiteSpace =
+            max (whiteSpace - margin) 0
+
+        let startOffsetX =
+            [0 .. width - 1]
+            |> Seq.takeWhile(fun x -> pixels.[x, 0 .. height - 1] |> Array.forall ((=) false))
+            |> Seq.length
+            |> keepMargin margin
+
+        let trimmedEndColumnsCount =
+            [0 .. width - 1]
+            |> Seq.rev
+            |> Seq.takeWhile(fun x -> pixels.[x, 0 .. height - 1] |> Array.forall ((=) false))
+            |> Seq.length
+            |> keepMargin margin
+
+        let startOffsetY =
+            [0 .. height - 1]
+            |> Seq.takeWhile(fun y -> pixels.[0 .. width - 1, y] |> Array.forall ((=) false))
+            |> Seq.length
+            |> keepMargin margin
+
+        let trimmedEndLinesCount =
+            [0 .. height - 1]
+            |> Seq.rev
+            |> Seq.takeWhile(fun y -> pixels.[0 .. width - 1, y] |> Array.forall ((=) false))
+            |> Seq.length
+            |> keepMargin margin
+
+        let trimmedPixels =
+            pixels.[startOffsetX .. width - 1- trimmedEndColumnsCount, startOffsetY .. height - 1 - trimmedEndLinesCount]
+
         {
             Text = word
             FontSize = fontSize
-            Width = width
-            Height = height
-            Pixels = Array2D.init width height (fun x y -> bitmap.GetPixel(x, y).A > 15uy)
+            Width = width - startOffsetX - trimmedEndColumnsCount
+            Height = height - startOffsetY - trimmedEndLinesCount
+            Offset = startOffsetX, startOffsetY
+            Pixels = trimmedPixels
         }
 
-    fontSizes |> List.map buildTestCandidate
+    fontSizes |> List.map (buildTestCandidate 1)
     
 type Spot = {
     X:int
@@ -81,27 +118,36 @@ let indexesOfNextTrueAndFalse repetitions = seq {
     }
 
 let updateBoundaries (forbiddenPixels:bool[,]) ((minX, maxX), (minY, maxY)) boundaries =
-    for y in minY .. maxY do
-        let nextTrueAndFalseOnLine =
-            seq { for x in 0 .. boundaries.Width - 1 do yield forbiddenPixels.[x, y] }
-            |> groupConsecutive
-            |> indexesOfNextTrueAndFalse
-            |> Seq.mapi (fun i value -> i, value)
+    [|
+        yield async {
+            for y in minY .. maxY do
+                let nextTrueAndFalseOnLine =
+                    seq { for x in 0 .. boundaries.Width - 1 do yield forbiddenPixels.[x, y] }
+                    |> groupConsecutive
+                    |> indexesOfNextTrueAndFalse
+                    |> Seq.mapi (fun i value -> i, value)
 
-        for x, (nextTrue, nextFalse) in nextTrueAndFalseOnLine do
-            boundaries.NextFreeRight.[x,y] <- nextFalse
-            boundaries.NextInvalidRight.[x,y] <- nextTrue
+                for x, (nextTrue, nextFalse) in nextTrueAndFalseOnLine do
+                    boundaries.NextFreeRight.[x,y] <- nextFalse
+                    boundaries.NextInvalidRight.[x,y] <- nextTrue
+        }
 
-    for x in minX .. maxX do
-        let nextTrueAndFalseOnColumn =
-            seq { for y in 0 .. boundaries.Height - 1 do yield forbiddenPixels.[x, y] }
-            |> groupConsecutive
-            |> indexesOfNextTrueAndFalse
-            |> Seq.mapi (fun i value -> i, value)
+        yield async {
+            for x in minX .. maxX do
+                let nextTrueAndFalseOnColumn =
+                    seq { for y in 0 .. boundaries.Height - 1 do yield forbiddenPixels.[x, y] }
+                    |> groupConsecutive
+                    |> indexesOfNextTrueAndFalse
+                    |> Seq.mapi (fun i value -> i, value)
 
-        for y, (nextTrue, nextFalse) in nextTrueAndFalseOnColumn do
-            boundaries.NextFreeBottom.[x,y] <- nextFalse
-            boundaries.NextInvalidBottom.[x,y] <- nextTrue
+                for y, (nextTrue, nextFalse) in nextTrueAndFalseOnColumn do
+                    boundaries.NextFreeBottom.[x,y] <- nextFalse
+                    boundaries.NextInvalidBottom.[x,y] <- nextTrue
+        }
+    |]
+    |> Async.Parallel
+    |> Async.RunSynchronously
+    |> ignore
 
     boundaries
 
@@ -163,6 +209,10 @@ type AddingState = {
 let addWord (targetColors: Color[,]) (state:AddingState) =
     let word, textCandidates = state.RemainingWords.Head
 
+    let totalCandidatesCount = (state.RemainingWords @ state.NextIterationWords) |> List.collect snd |> List.length
+    
+    printfn "%s, remaining candidates = %d" word totalCandidatesCount
+    
     let boundaries = state.Boundaries
 
     let rec findSpot (width, height) (x, y) =
@@ -234,7 +284,6 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
     let target = Bitmap.FromFile(inputFolder + inputFile) :?> Bitmap
     let targetColors = getColors target
     let empty = new Bitmap(target.Width, target.Height)
-
     let result =
         let forbiddenPixels = Array2D.init target.Width target.Height (fun x y -> targetColors.[x, y].A < 15uy)
         let startingState =
@@ -251,12 +300,13 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
         let result = new Bitmap(target.Width, target.Height)
         use g = Graphics.FromImage result
         g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
+
         for spot in finalState.WordsSpots do
             let color = targetColors.[spot.X + spot.TextCandidate.Width / 2, spot.Y + spot.TextCandidate.Height / 2]
             use font = getFont spot.TextCandidate.FontSize
             use brush = new SolidBrush(color)
-            g.DrawString(spot.TextCandidate.Text, font, brush, single spot.X, single spot.Y)
+            g.DrawString(spot.TextCandidate.Text, font, brush, single (spot.X - fst spot.TextCandidate.Offset), single (spot.Y - snd spot.TextCandidate.Offset))
 
         result
-
+        
     result.Save(outputFolder + inputFile, ImageFormat.Png)
