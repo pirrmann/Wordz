@@ -87,9 +87,7 @@ type Boundaries = {
     Width: int
     Height: int
     NextInvalidRight: int[,]
-    NextFreeRight: int[,]
-    NextInvalidBottom: int[,]
-    NextFreeBottom: int[,] }
+    NextFreeRight: int[,] }
 
 let groupConsecutive input = seq {
         let mutable currentGroup : option<int * int * _>  = None
@@ -120,8 +118,8 @@ let indexesOfNextTrueAndFalse repetitions = seq {
 
 let updateBoundaries (forbiddenPixels:bool[,]) ((minX, maxX), (minY, maxY)) boundaries =
     [|
-        yield async {
-            for y in minY .. maxY do
+        for y in minY .. maxY do
+            yield async {
                 let nextTrueAndFalseOnLine =
                     seq { for x in 0 .. boundaries.Width - 1 do yield forbiddenPixels.[x, y] }
                     |> groupConsecutive
@@ -131,20 +129,7 @@ let updateBoundaries (forbiddenPixels:bool[,]) ((minX, maxX), (minY, maxY)) boun
                 for x, (nextTrue, nextFalse) in nextTrueAndFalseOnLine do
                     boundaries.NextFreeRight.[x,y] <- nextFalse
                     boundaries.NextInvalidRight.[x,y] <- nextTrue
-        }
-
-        yield async {
-            for x in minX .. maxX do
-                let nextTrueAndFalseOnColumn =
-                    seq { for y in 0 .. boundaries.Height - 1 do yield forbiddenPixels.[x, y] }
-                    |> groupConsecutive
-                    |> indexesOfNextTrueAndFalse
-                    |> Seq.mapi (fun i value -> i, value)
-
-                for y, (nextTrue, nextFalse) in nextTrueAndFalseOnColumn do
-                    boundaries.NextFreeBottom.[x,y] <- nextFalse
-                    boundaries.NextInvalidBottom.[x,y] <- nextTrue
-        }
+            }
     |]
     |> Async.Parallel
     |> Async.RunSynchronously
@@ -158,16 +143,12 @@ let getBoundaries (forbiddenPixels:bool[,]) =
 
     let nextFreeRight = Array2D.zeroCreate width height
     let nextInvalidRight = Array2D.zeroCreate width height
-    let nextFreeBottom = Array2D.zeroCreate width height
-    let nextInvalidBottom = Array2D.zeroCreate width height
 
     {
         Width = width
         Height = height
         NextFreeRight = nextFreeRight
         NextInvalidRight = nextInvalidRight
-        NextFreeBottom = nextFreeBottom
-        NextInvalidBottom = nextInvalidBottom
     } |> updateBoundaries forbiddenPixels ((0, width - 1), (0, height - 1))
 
 type FitResult =
@@ -175,29 +156,22 @@ type FitResult =
     | CannotFitUntilX of int
 
 let canFit boundaries (width, height) (x, y)  =
-    let blockingPixelsRight =
-        lazy ([| y .. min (y + height) (boundaries.Height - 1) |]
-              |> Array.map (fun y -> boundaries.NextInvalidRight.[x, y], y)
-              |> Array.filter (fun (right, _) -> right < x + width))
-    let blockingPixelsBottom =
-        lazy ([| x .. min (x + width) (boundaries.Width - 1) |]
-              |> Array.map (fun x -> x, boundaries.NextInvalidBottom.[x, y])
-              |> Array.filter (fun (_, bottom) -> bottom < y + height))
-    
-    if blockingPixelsRight.Value.Length > 0 then
-        let blockingX, blockingY = Array.maxBy fst blockingPixelsRight.Value
-        let nextFreeX = if blockingX < boundaries.NextFreeRight.GetLength(0) && blockingY < boundaries.NextFreeRight.GetLength(1)
-                        then boundaries.NextFreeRight.[blockingX, blockingY]
-                        else blockingX
-        CannotFitUntilX nextFreeX
-    elif blockingPixelsBottom.Value.Length > 0 then
-        let blockingX, blockingY = Array.maxBy fst blockingPixelsBottom.Value
-        let nextFreeX = if blockingX < boundaries.NextFreeRight.GetLength(0) && blockingY < boundaries.NextFreeRight.GetLength(1)
-                        then boundaries.NextFreeRight.[blockingX, blockingY]
-                        else blockingX
-        CannotFitUntilX nextFreeX
+    if y + height > boundaries.Height then
+        CannotFitUntilX boundaries.Width
     else
-        Fits
+        let blockingPixelsRight =
+            [| y .. min (y + height) (boundaries.Height - 1) |]
+            |> Array.map (fun y -> boundaries.NextInvalidRight.[x, y], y)
+            |> Array.filter (fun (right, _) -> right < x + width)
+    
+        if blockingPixelsRight.Length > 0 then
+            let blockingX, blockingY = Array.maxBy fst blockingPixelsRight
+            let nextFreeX = if blockingX < boundaries.NextFreeRight.GetLength(0) && blockingY < boundaries.NextFreeRight.GetLength(1)
+                            then boundaries.NextFreeRight.[blockingX, blockingY]
+                            else blockingX
+            CannotFitUntilX nextFreeX
+        else
+            Fits
 
 type AddingState = {
      ForbiddenPixels: bool[,]
@@ -268,19 +242,24 @@ let rand =
     let r = new System.Random(42)
     fun () -> r.NextDouble()
 
-let rec addWords targetColors (state:AddingState) =
+let rec addWords shuffle targetColors (state:AddingState) =
     match state.RemainingWords, state.NextIterationWords with
     | [], [] -> state
     | [], nextIterationWords ->
-        let remainingWords = nextIterationWords |> List.sortBy (fun _ -> rand())
+        let remainingWords =
+            if shuffle then
+                nextIterationWords |> List.sortBy (fun _ -> rand())
+            else
+                nextIterationWords |> List.rev
+
         let state' = { state with RemainingWords = remainingWords
                                   NextIterationWords = [] }
-        addWords targetColors state'
+        addWords shuffle targetColors state'
     | _ ->
         let state' = addWord targetColors state
-        addWords targetColors state'
+        addWords shuffle targetColors state'
 
-let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
+let generate (inputFolder:string, outputFolder:string) shuffle (inputFile, words) =
     let path = Path.Combine(inputFolder, inputFile)
     let target = Bitmap.FromFile(path) :?> Bitmap
     let targetColors = getColors target
@@ -296,7 +275,7 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
                 NextIterationWords = words
             }
 
-        let finalState = addWords targetColors startingState
+        let finalState = addWords shuffle targetColors startingState
 
         let result = new Bitmap(target.Width, target.Height)
         use g = Graphics.FromImage result

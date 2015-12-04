@@ -61,7 +61,7 @@ let main argv =
         [|
             for inputFile, useBigCurrencies in inputFiles do
                 let words = if useBigCurrencies then wordsWithBigCurrencies else wordsWithOnlySmallCurrencies
-                yield async { Logic.generate (inputFolder, outputFolder) (inputFile, words) }
+                yield async { Logic.generate (inputFolder, outputFolder) true (inputFile, words) }
         |]
         |> Async.Parallel
         |> Async.RunSynchronously
