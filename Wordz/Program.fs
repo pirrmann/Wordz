@@ -3,14 +3,6 @@
         "FSharp"; "Paris"; "dojo"; "kata"; "Alice"; "Wonderland"; "code";
         "cards"; "doublets"; "alphabet"; "cypher"; "number"; "game"
         "@pirrmann"; "@brandewinder"; "@thinkb4coding"; "computation"; "type";
-    
-        "fun"; "async"; "compose"; ">>"; "|>"; "tuple"; "union"; "record"
-        "magic"; "square"; "fox"; "goose"; "bag"; "corn"; "love"; "skills"
-        "functions"; "map"; "filter"; "choose"; "let"; "rec"; "seq"
-
-        "fun"; "async"; "compose"; ">>"; "|>"; "tuple"; "union"; "record"
-        "magic"; "square"; "fox"; "goose"; "bag"; "corn"; "love"; "skills"
-        "functions"; "map"; "filter"; "choose"; "let"; "rec"; "seq"
         "fun"; "async"; "compose"; ">>"; "|>"; "tuple"; "union"; "record"
         "magic"; "square"; "fox"; "goose"; "bag"; "corn"; "love"; "skills"
         "functions"; "map"; "filter"; "choose"; "let"; "rec"; "seq"
@@ -57,5 +49,5 @@ let main argv =
         |]
         |> Async.Parallel
         |> Async.RunSynchronously
-    printf "Elapsed : %O" sw.Elapsed
+    printfn "Elapsed : %O" sw.Elapsed
     0
