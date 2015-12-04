@@ -2,6 +2,7 @@
 
 open System.Drawing
 open System.Drawing.Imaging
+open System.IO
     
 let getColors (bitmap:Bitmap) =
     Array2D.init bitmap.Width bitmap.Height (fun x y -> bitmap.GetPixel(x, y))
@@ -280,8 +281,8 @@ let rec addWords targetColors (state:AddingState) =
         addWords targetColors state'
 
 let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
-
-    let target = Bitmap.FromFile(inputFolder + inputFile) :?> Bitmap
+    let path = Path.Combine(inputFolder, inputFile)
+    let target = Bitmap.FromFile(path) :?> Bitmap
     let targetColors = getColors target
     let empty = new Bitmap(target.Width, target.Height)
     let result =
@@ -309,4 +310,6 @@ let generate (inputFolder:string, outputFolder:string) (inputFile, words) =
 
         result
         
-    result.Save(outputFolder + inputFile, ImageFormat.Png)
+    let outputPath = Path.Combine(outputFolder, inputFile)
+    Directory.CreateDirectory(outputFolder) |> ignore
+    result.Save(outputPath, ImageFormat.Png)
