@@ -17,7 +17,7 @@ let fontSizes =
     [11 .. -1 .. 4]
 
 let buildWordSet fontSizes wordsToUse =
-    wordsToUse |> List.map (fun word -> word, Logic.buildTestCandidates word fontSizes)
+    wordsToUse |> List.map (fun word -> word, TextCandidates.buildTestCandidates word fontSizes)
 
 let inputFolder = @"C:\Users\Pierre\Pictures\LevisIdeas"
 let outputFolder = @"C:\Code"
@@ -57,11 +57,14 @@ let wordsWithOnlySmallCurrencies =
 [<EntryPoint>]
 let main argv =
     let sw = System.Diagnostics.Stopwatch.StartNew()
+
+    let spotsFinder = new DefaultLogic.DefaultSpotFinder(true)
+
     let tasks =
         [|
             for inputFile, useBigCurrencies in inputFiles do
                 let words = if useBigCurrencies then wordsWithBigCurrencies else wordsWithOnlySmallCurrencies
-                yield async { Logic.generate (inputFolder, outputFolder) true (inputFile, words) }
+                yield async { ImageGenerator.generate spotsFinder (inputFolder, outputFolder) (inputFile, words) }
         |]
         |> Async.Parallel
         |> Async.RunSynchronously

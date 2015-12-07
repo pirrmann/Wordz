@@ -1,87 +1,9 @@
-﻿module Logic
+﻿module DefaultLogic
 
 open System.Drawing
-open System.Drawing.Imaging
-open System.IO
-    
-let getColors (bitmap:Bitmap) =
-    Array2D.init bitmap.Width bitmap.Height (fun x y -> bitmap.GetPixel(x, y))
 
-type TextCandidate = {
-    Text: string
-    FontSize: int
-    Width: int
-    Height: int
-    Offset: int * int
-    Pixels: bool[,]
-}
-
-let getFont size = new Font("Arial", float32 size)
-
-let buildTestCandidates word fontSizes =
-    use bit = new Bitmap(1, 1)
-    use measureGraphics = bit |> Graphics.FromImage
-    measureGraphics.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
-
-    let buildTestCandidate margin fontSize =
-        use font = getFont fontSize
-        let size = measureGraphics.MeasureString(word, font)
-        let width, height = int size.Width, int size.Height
-        use bitmap = new Bitmap(width, height)
-        use g = bitmap |> Graphics.FromImage
-        g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
-        g.DrawString(word, font, Brushes.Black, 0.f, 0.f)
-
-        let pixels = Array2D.init width height (fun x y -> bitmap.GetPixel(x, y).A > 15uy)
-
-        let keepMargin margin whiteSpace =
-            max (whiteSpace - margin) 0
-
-        let startOffsetX =
-            [0 .. width - 1]
-            |> Seq.takeWhile(fun x -> pixels.[x, 0 .. height - 1] |> Array.forall ((=) false))
-            |> Seq.length
-            |> keepMargin margin
-
-        let trimmedEndColumnsCount =
-            [0 .. width - 1]
-            |> Seq.rev
-            |> Seq.takeWhile(fun x -> pixels.[x, 0 .. height - 1] |> Array.forall ((=) false))
-            |> Seq.length
-            |> keepMargin margin
-
-        let startOffsetY =
-            [0 .. height - 1]
-            |> Seq.takeWhile(fun y -> pixels.[0 .. width - 1, y] |> Array.forall ((=) false))
-            |> Seq.length
-            |> keepMargin margin
-
-        let trimmedEndLinesCount =
-            [0 .. height - 1]
-            |> Seq.rev
-            |> Seq.takeWhile(fun y -> pixels.[0 .. width - 1, y] |> Array.forall ((=) false))
-            |> Seq.length
-            |> keepMargin margin
-
-        let trimmedPixels =
-            pixels.[startOffsetX .. width - 1- trimmedEndColumnsCount, startOffsetY .. height - 1 - trimmedEndLinesCount]
-
-        {
-            Text = word
-            FontSize = fontSize
-            Width = width - startOffsetX - trimmedEndColumnsCount
-            Height = height - startOffsetY - trimmedEndLinesCount
-            Offset = startOffsetX, startOffsetY
-            Pixels = trimmedPixels
-        }
-
-    fontSizes |> List.map (buildTestCandidate 1)
-    
-type Spot = {
-    X:int
-    Y:int
-    TextCandidate: TextCandidate
-}
+open TextCandidates
+open ISpotFinder
 
 type Boundaries = {
     Width: int
@@ -259,36 +181,21 @@ let rec addWords shuffle targetColors (state:AddingState) =
         let state' = addWord targetColors state
         addWords shuffle targetColors state'
 
-let generate (inputFolder:string, outputFolder:string) shuffle (inputFile, words) =
-    let path = Path.Combine(inputFolder, inputFile)
-    let target = Bitmap.FromFile(path) :?> Bitmap
-    let targetColors = getColors target
-    let empty = new Bitmap(target.Width, target.Height)
-    let result =
-        let forbiddenPixels = Array2D.init target.Width target.Height (fun x y -> targetColors.[x, y].A < 15uy)
-        let startingState =
-            {
-                ForbiddenPixels = forbiddenPixels
-                Boundaries = getBoundaries forbiddenPixels
-                WordsSpots = []
-                RemainingWords = []
-                NextIterationWords = words
-            }
+let placeWords (targetColors: Color[,]) words shuffle = 
+    let forbiddenPixels = Array2D.init (targetColors.GetLength(0)) (targetColors.GetLength(1)) (fun x y -> targetColors.[x, y].A < 15uy)
+    let startingState =
+        {
+            ForbiddenPixels = forbiddenPixels
+            Boundaries = getBoundaries forbiddenPixels
+            WordsSpots = []
+            RemainingWords = []
+            NextIterationWords = words
+        }
 
-        let finalState = addWords shuffle targetColors startingState
+    let finalState = addWords shuffle targetColors startingState
+    finalState.WordsSpots
 
-        let result = new Bitmap(target.Width, target.Height)
-        use g = Graphics.FromImage result
-        g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
-
-        for spot in finalState.WordsSpots do
-            let color = targetColors.[spot.X + spot.TextCandidate.Width / 2, spot.Y + spot.TextCandidate.Height / 2]
-            use font = getFont spot.TextCandidate.FontSize
-            use brush = new SolidBrush(color)
-            g.DrawString(spot.TextCandidate.Text, font, brush, single (spot.X - fst spot.TextCandidate.Offset), single (spot.Y - snd spot.TextCandidate.Offset))
-
-        result
-        
-    let outputPath = Path.Combine(outputFolder, inputFile)
-    Directory.CreateDirectory(outputFolder) |> ignore
-    result.Save(outputPath, ImageFormat.Png)
+type DefaultSpotFinder(shuffle:bool) =
+    interface ISpotFinder with
+        member x.FindSpots (targetColors: System.Drawing.Color[,]) (words: (string * TextCandidate list) list) =
+            placeWords targetColors words shuffle

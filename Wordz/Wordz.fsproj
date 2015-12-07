@@ -48,7 +48,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Logic.fs" />
+    <Compile Include="DrawingHelpers.fs" />
+    <Compile Include="TextCandidates.fs" />
+    <Compile Include="ISpotFinder.fs" />
+    <Compile Include="DefaultLogic.fs" />
+    <Compile Include="ImageGenerator.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
   </ItemGroup>
