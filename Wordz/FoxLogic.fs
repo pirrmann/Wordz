@@ -11,32 +11,6 @@ type Boundaries = {
     AvailableRight: int [,]
     }
 
-let groupConsecutive input = seq {
-        let mutable currentGroup : option<int * int * _>  = None
-        for elem in input do
-            match currentGroup with
-            | None ->
-                currentGroup <- Some (0, 1, elem)
-            | Some (start, n, value) ->
-                if value = elem then
-                    currentGroup <- Some (start, n+1, value)
-                else
-                    yield start, n, value
-                    currentGroup <- Some (start+n, 1, elem)
-
-        match currentGroup with
-        | None -> ()
-        | Some g -> yield g
-    }
-
-let countFalse repetitions = seq {
-    for (start, count, value) in repetitions do
-        if value then
-            for i in count .. -1 .. 1 do yield -i
-        else
-            for i in count .. -1 .. 1 do yield i
-    }
-
 let updateBoundaries (forbiddenPixels:bool[,]) (minY, maxY) boundaries =
     let inline fill y start count value = 
         if value then                   
@@ -131,9 +105,7 @@ let addWord (state:AddingState) =
                 }
             | None -> ()
         }
-    //let sw = System.Diagnostics.Stopwatch.StartNew()
     let bestSpot = spots |> Seq.tryHead
-    //printfn "Spot computation: %O" sw.Elapsed 
 
     let newState =
         match bestSpot with
@@ -143,9 +115,7 @@ let addWord (state:AddingState) =
                     state.ForbiddenPixels.[spot.X + x, spot.Y + y] <- state.ForbiddenPixels.[spot.X + x, spot.Y + y] || spot.TextCandidate.Pixels.[x, y]
 
             let remainingCandidates = textCandidates |> List.skipWhile (fun c -> c <> spot.TextCandidate)
-            //let w = System.Diagnostics.Stopwatch.StartNew()
             let updatedBoundaries = state.Boundaries |> updateBoundaries state.ForbiddenPixels (spot.Y, spot.Y + spot.TextCandidate.Height - 1)
-            //printfn "Boundaries: %O" w.Elapsed 
             
             {
                 ForbiddenPixels = state.ForbiddenPixels
@@ -178,9 +148,7 @@ let rec addWords shuffle (state:AddingState) =
                                   NextIterationWords = [] }
         addWords shuffle state'
     | _ ->
-        //let w = System.Diagnostics.Stopwatch.StartNew ()
         let state' = addWord state
-        //printfn "State evol : %O" w.Elapsed
         addWords shuffle state'
 
 let makeForbidenPixels (colors: Color[,]) =
