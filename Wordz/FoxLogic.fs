@@ -37,7 +37,7 @@ let countFalse repetitions = seq {
             for i in count .. -1 .. 1 do yield i
     }
 
-let updateBoundaries (forbiddenPixels:bool[,]) ((minX, maxX), (minY, maxY)) boundaries =
+let updateBoundaries (forbiddenPixels:bool[,]) (minY, maxY) boundaries =
     [|
         for y in minY .. maxY do
             yield async {
@@ -66,7 +66,7 @@ let getBoundaries (forbiddenPixels:bool[,]) =
         Width = width
         Height = height
         AvailableRight = availableRight
-    } |> updateBoundaries forbiddenPixels ((0, width - 1), (0, height - 1))
+    } |> updateBoundaries forbiddenPixels (0, height - 1)
 
 type AddingState = {
      ForbiddenPixels: bool[,]
@@ -138,7 +138,7 @@ let addWord (state:AddingState) =
 
             let remainingCandidates = textCandidates |> List.skipWhile (fun c -> c <> spot.TextCandidate)
             //let w = System.Diagnostics.Stopwatch.StartNew()
-            let updatedBoundaries = state.Boundaries |> updateBoundaries state.ForbiddenPixels ((spot.X, spot.X + spot.TextCandidate.Width - 1), (spot.Y, spot.Y + spot.TextCandidate.Height - 1))
+            let updatedBoundaries = state.Boundaries |> updateBoundaries state.ForbiddenPixels (spot.Y, spot.Y + spot.TextCandidate.Height - 1)
             //printfn "Boundaries: %O" w.Elapsed 
             
             {
