@@ -6,9 +6,8 @@ open DrawingHelpers
 
 open ISpotFinder
 
-let generate (spotFinder:ISpotFinder) (inputFolder:string, outputFolder:string) (inputFile, words) =
-    let path = Path.Combine(inputFolder, inputFile)
-    let target = Bitmap.FromFile(path) :?> Bitmap
+let generate (spotFinder:ISpotFinder) (inputFilePath:string, outputFilePath:string) words =
+    let target = Bitmap.FromFile(inputFilePath) :?> Bitmap
     let targetColors = getColors target
 
     let wordsSpots = spotFinder.FindSpots targetColors words
@@ -23,6 +22,4 @@ let generate (spotFinder:ISpotFinder) (inputFolder:string, outputFolder:string) 
         use brush = new SolidBrush(color)
         g.DrawString(spot.TextCandidate.Text, font, brush, single (spot.X - fst spot.TextCandidate.Offset), single (spot.Y - snd spot.TextCandidate.Offset))
         
-    let outputPath = Path.Combine(outputFolder, inputFile)
-    Directory.CreateDirectory(outputFolder) |> ignore
-    result.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png)
+    result.Save(outputFilePath, System.Drawing.Imaging.ImageFormat.Png)

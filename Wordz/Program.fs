@@ -60,11 +60,15 @@ let main argv =
 
     let spotsFinder = new DefaultLogic.DefaultSpotFinder(true)
 
+    System.IO.Directory.CreateDirectory(outputFolder) |> ignore
+
     let tasks =
         [|
             for inputFile, useBigCurrencies in inputFiles do
+                let inputFilePath = System.IO.Path.Combine(inputFolder, inputFile)
+                let outputFilePath = System.IO.Path.Combine(outputFolder, inputFile)
                 let words = if useBigCurrencies then wordsWithBigCurrencies else wordsWithOnlySmallCurrencies
-                yield async { ImageGenerator.generate spotsFinder (inputFolder, outputFolder) (inputFile, words) }
+                yield async { ImageGenerator.generate spotsFinder (inputFilePath, outputFilePath) words }
         |]
         |> Async.Parallel
         |> Async.RunSynchronously
