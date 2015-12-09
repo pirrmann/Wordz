@@ -38,23 +38,29 @@ let countFalse repetitions = seq {
     }
 
 let updateBoundaries (forbiddenPixels:bool[,]) (minY, maxY) boundaries =
-    [|
-        for y in minY .. maxY do
-            yield async {
-                    let falseCountsOnLine =
-                        seq { for x in 0 .. boundaries.Width - 1 do yield forbiddenPixels.[x, y] }
-                        |> groupConsecutive
-                        |> countFalse
+    let inline fill y start count value = 
+        if value then                   
+            for i in count .. -1 .. 1 do boundaries.AvailableRight.[start+count-i, y] <- -i
+        else
+            for i in count .. -1 .. 1 do boundaries.AvailableRight.[start+count-i, y] <- i
 
-                    let mutable x = 0
-                    for count in falseCountsOnLine do
-                        boundaries.AvailableRight.[x,y] <- count
-                        x <- x + 1
-            }
-    |]
-    |> Async.Parallel
-    |> Async.RunSynchronously
-    |> ignore
+    for y in minY .. maxY do
+        let mutable currentGroup : option<int * int * _>  = None
+        for x in 0 .. boundaries.Width - 1 do
+            let elem = forbiddenPixels.[x, y]
+            match currentGroup with
+            | None ->
+                currentGroup <- Some (0, 1, elem)
+            | Some (start, n, value) ->
+                if value = elem then
+                    currentGroup <- Some (start, n+1, value)
+                else
+                    fill y start n value
+                    currentGroup <- Some (start+n, 1, elem)
+                        
+        match currentGroup with
+        | None -> ()
+        | Some (start, n, value) -> fill y start n value
 
     boundaries
 
