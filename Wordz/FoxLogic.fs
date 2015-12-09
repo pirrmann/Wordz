@@ -11,9 +11,17 @@ type Boundaries = {
     AvailableRight: int [,]
     }
 
-let groupConsecutive input = seq {
+let updateBoundaries (forbiddenPixels:bool[,]) (minY, maxY) boundaries =
+    let inline fill y start count value = 
+        if value then                   
+            for i in count .. -1 .. 1 do boundaries.AvailableRight.[start+count-i, y] <- -i
+        else
+            for i in count .. -1 .. 1 do boundaries.AvailableRight.[start+count-i, y] <- i
+
+    for y in minY .. maxY do
         let mutable currentGroup : option<int * int * _>  = None
-        for elem in input do
+        for x in 0 .. boundaries.Width - 1 do
+            let elem = forbiddenPixels.[x, y]
             match currentGroup with
             | None ->
                 currentGroup <- Some (0, 1, elem)
@@ -21,40 +29,12 @@ let groupConsecutive input = seq {
                 if value = elem then
                     currentGroup <- Some (start, n+1, value)
                 else
-                    yield start, n, value
+                    fill y start n value
                     currentGroup <- Some (start+n, 1, elem)
-
+                        
         match currentGroup with
         | None -> ()
-        | Some g -> yield g
-    }
-
-let countFalse repetitions = seq {
-    for (start, count, value) in repetitions do
-        if value then
-            for i in count .. -1 .. 1 do yield -count
-        else
-            for i in count .. -1 .. 1 do yield i
-    }
-
-let updateBoundaries (forbiddenPixels:bool[,]) ((minX, maxX), (minY, maxY)) boundaries =
-    [|
-        for y in minY .. maxY do
-            yield async {
-                    let falseCountsOnLine =
-                        seq { for x in 0 .. boundaries.Width - 1 do yield forbiddenPixels.[x, y] }
-                        |> groupConsecutive
-                        |> countFalse
-
-                    let mutable x = 0
-                    for count in falseCountsOnLine do
-                        boundaries.AvailableRight.[x,y] <- count
-                        x <- x + 1
-            }
-    |]
-    |> Async.Parallel
-    |> Async.RunSynchronously
-    |> ignore
+        | Some (start, n, value) -> fill y start n value
 
     boundaries
 
@@ -66,7 +46,7 @@ let getBoundaries (forbiddenPixels:bool[,]) =
         Width = width
         Height = height
         AvailableRight = availableRight
-    } |> updateBoundaries forbiddenPixels ((0, width - 1), (0, height - 1))
+    } |> updateBoundaries forbiddenPixels (0, height - 1)
 
 type AddingState = {
      ForbiddenPixels: bool[,]
@@ -79,26 +59,23 @@ type AddingState = {
 let findSpot boundaries (width, height) =
     let rec spotOk (x,y) remaining =
         match remaining with
-        | 0 -> true
+        | 0 -> true, 0
         | remaining ->
             let available = boundaries.AvailableRight.[x, y]
             if available >= width then
                 spotOk (x, y+1) (remaining-1)
             else
-                false
+                false, available
 
     let mutable x = 0
     let mutable y = 0
     let mutable found = false
     while y < boundaries.Height - height + 1 && not found do
-        if spotOk (x,y) height then
+        let ok, moveBy = spotOk (x,y) height
+        if ok then
             found <- true
         else
-            let moveBy = boundaries.AvailableRight.[x, y]
-            if moveBy < width then
-                x <- x + (abs moveBy)
-            else
-                x <- x + 1
+            x <- x + (abs moveBy)
             if x >= boundaries.Width then
                 y <- y + 1
                 x <- 0
@@ -128,9 +105,7 @@ let addWord (state:AddingState) =
                 }
             | None -> ()
         }
-    //let sw = System.Diagnostics.Stopwatch.StartNew()
     let bestSpot = spots |> Seq.tryHead
-    //printfn "Spot computation: %O" sw.Elapsed 
 
     let newState =
         match bestSpot with
@@ -140,9 +115,7 @@ let addWord (state:AddingState) =
                     state.ForbiddenPixels.[spot.X + x, spot.Y + y] <- state.ForbiddenPixels.[spot.X + x, spot.Y + y] || spot.TextCandidate.Pixels.[x, y]
 
             let remainingCandidates = textCandidates |> List.skipWhile (fun c -> c <> spot.TextCandidate)
-            //let w = System.Diagnostics.Stopwatch.StartNew()
-            let updatedBoundaries = state.Boundaries |> updateBoundaries state.ForbiddenPixels ((spot.X, spot.X + spot.TextCandidate.Width - 1), (spot.Y, spot.Y + spot.TextCandidate.Height - 1))
-            //printfn "Boundaries: %O" w.Elapsed 
+            let updatedBoundaries = state.Boundaries |> updateBoundaries state.ForbiddenPixels (spot.Y, spot.Y + spot.TextCandidate.Height - 1)
             
             {
                 ForbiddenPixels = state.ForbiddenPixels
@@ -175,9 +148,7 @@ let rec addWords shuffle (state:AddingState) =
                                   NextIterationWords = [] }
         addWords shuffle state'
     | _ ->
-        //let w = System.Diagnostics.Stopwatch.StartNew ()
         let state' = addWord state
-        //printfn "State evol : %O" w.Elapsed
         addWords shuffle state'
 
 let makeForbidenPixels (colors: Color[,]) =

@@ -19,7 +19,7 @@ let fontSizes =
 let inputFolder = @"..\..\..\"
 let outputFolder = @"..\..\..\"
 
-let inputFile = "SampleBig.png"
+let inputFile = "Sample.png"
 
 let testWith spotsFinder =
     let sw = System.Diagnostics.Stopwatch.StartNew()
