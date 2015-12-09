@@ -54,6 +54,7 @@
     <Compile Include="DefaultLogic.fs" />
     <Compile Include="FoxLogic.fs" />
     <Compile Include="ImageGenerator.fs" />
+    <Compile Include="WordzGenerator.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
   </ItemGroup>
