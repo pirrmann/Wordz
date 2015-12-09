@@ -32,7 +32,7 @@ let groupConsecutive input = seq {
 let countFalse repetitions = seq {
     for (start, count, value) in repetitions do
         if value then
-            for i in count .. -1 .. 1 do yield 0
+            for i in count .. -1 .. 1 do yield -count
         else
             for i in count .. -1 .. 1 do yield i
     }
@@ -90,13 +90,16 @@ let findSpot boundaries (width, height) =
     let mutable x = 0
     let mutable y = 0
     let mutable found = false
-    while y < boundaries.Height && not found do
+    while y < boundaries.Height - height + 1 && not found do
         if spotOk (x,y) height then
             found <- true
         else
-            if x < boundaries.Width-1 then
-                x <- x + 1
+            let moveBy = boundaries.AvailableRight.[x, y]
+            if moveBy < width then
+                x <- x + (abs moveBy)
             else
+                x <- x + 1
+            if x >= boundaries.Width then
                 y <- y + 1
                 x <- 0
 

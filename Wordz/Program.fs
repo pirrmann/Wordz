@@ -19,7 +19,7 @@ let fontSizes =
 let inputFolder = @"..\..\..\"
 let outputFolder = @"..\..\..\"
 
-let inputFile = "Sample.png"
+let inputFile = "SampleBig.png"
 
 let testWith spotsFinder =
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -44,10 +44,10 @@ let testWith spotsFinder =
 let main argv =
     let sw = System.Diagnostics.Stopwatch.StartNew()
 
-    let def = testWith (new DefaultLogic.DefaultSpotFinder(true))
+    //let def = testWith (new DefaultLogic.DefaultSpotFinder(true))
     let fox = testWith (new FoxLogic.FoxSpotFinder(true))
 
-    printfn "Elapsed default : %O" def
+    //printfn "Elapsed default : %O" def
     printfn "Elapsed fox : %O" fox
     
     System.Console.ReadLine() |> ignore
