@@ -180,25 +180,15 @@ let rec addWords shuffle (state:AddingState) =
         //printfn "State evol : %O" w.Elapsed
         addWords shuffle state'
 
-type ForbidenPixelsInfo = {
-    ForbiddenPixels : bool [,]
-    Left : int
-    Top : int
-}
-
 let makeForbidenPixels (colors: Color[,]) =
-    {
-        ForbiddenPixels = Array2D.init (colors.GetLength(0)) (colors.GetLength(1)) (fun x y -> colors.[x, y].A < 15uy)
-        Left = 0
-        Top = 0
-    }
+    Array2D.init (colors.GetLength(0)) (colors.GetLength(1)) (fun x y -> colors.[x, y].A < 15uy)
 
 let placeWords (targetColors: Color[,]) words shuffle = 
     let forbiddenPixels = makeForbidenPixels targetColors
     let startingState =
         {
-            ForbiddenPixels = forbiddenPixels.ForbiddenPixels
-            Boundaries = getBoundaries forbiddenPixels.ForbiddenPixels
+            ForbiddenPixels = forbiddenPixels
+            Boundaries = getBoundaries forbiddenPixels
             WordsSpots = []
             RemainingWords = []
             NextIterationWords = words
