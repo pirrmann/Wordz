@@ -105,7 +105,7 @@ let findSpot boundaries (width, height) =
     else
         None
 
-let addWord (targetColors: Color[,]) (state:AddingState) =
+let addWord (state:AddingState) =
     let word, textCandidates = state.RemainingWords.Head
 
     let totalCandidatesCount = (state.RemainingWords @ state.NextIterationWords) |> List.collect snd |> List.length
@@ -158,7 +158,7 @@ let rand =
     let r = new System.Random(42)
     fun () -> r.NextDouble()
 
-let rec addWords shuffle targetColors (state:AddingState) =
+let rec addWords shuffle (state:AddingState) =
     match state.RemainingWords, state.NextIterationWords with
     | [], [] -> state
     | [], nextIterationWords ->
@@ -170,25 +170,38 @@ let rec addWords shuffle targetColors (state:AddingState) =
 
         let state' = { state with RemainingWords = remainingWords
                                   NextIterationWords = [] }
-        addWords shuffle targetColors state'
+        addWords shuffle state'
     | _ ->
         //let w = System.Diagnostics.Stopwatch.StartNew ()
-        let state' = addWord targetColors state
+        let state' = addWord state
         //printfn "State evol : %O" w.Elapsed
-        addWords shuffle targetColors state'
+        addWords shuffle state'
+
+type ForbidenPixelsInfo = {
+    ForbiddenPixels : bool [,]
+    Left : int
+    Top : int
+}
+
+let makeForbidenPixels (colors: Color[,]) =
+    {
+        ForbiddenPixels = Array2D.init (colors.GetLength(0)) (colors.GetLength(1)) (fun x y -> colors.[x, y].A < 15uy)
+        Left = 0
+        Top = 0
+    }
 
 let placeWords (targetColors: Color[,]) words shuffle = 
-    let forbiddenPixels = Array2D.init (targetColors.GetLength(0)) (targetColors.GetLength(1)) (fun x y -> targetColors.[x, y].A < 15uy)
+    let forbiddenPixels = makeForbidenPixels targetColors
     let startingState =
         {
-            ForbiddenPixels = forbiddenPixels
-            Boundaries = getBoundaries forbiddenPixels
+            ForbiddenPixels = forbiddenPixels.ForbiddenPixels
+            Boundaries = getBoundaries forbiddenPixels.ForbiddenPixels
             WordsSpots = []
             RemainingWords = []
             NextIterationWords = words
         }
 
-    let finalState = addWords shuffle targetColors startingState
+    let finalState = addWords shuffle startingState
     finalState.WordsSpots
 
 type FoxSpotFinder(shuffle:bool) =
