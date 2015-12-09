@@ -32,8 +32,8 @@ let testWith spotsFinder =
             Path.GetFileNameWithoutExtension(inputFile) + "_wordz" + Path.GetExtension(inputFile))
     
     {
-        Input  = FileInfo(inputFilePath)
-        Output  = FileInfo(outputFilePath)
+        Input = FileInfo(inputFilePath)
+        Output = FileInfo(outputFilePath)
         FontSizes = fontSizes
         Words = coolWords
     } |> WordzGenerator.generate spotsFinder
@@ -44,12 +44,8 @@ let testWith spotsFinder =
 let main argv =
     let sw = System.Diagnostics.Stopwatch.StartNew()
 
-    //let def = testWith (new DefaultLogic.DefaultSpotFinder(true))
     let fox = testWith (new FoxLogic.FoxSpotFinder(true))
 
-    //printfn "Elapsed default : %O" def
     printfn "Elapsed fox : %O" fox
     
-    System.Console.ReadLine() |> ignore
-
     0

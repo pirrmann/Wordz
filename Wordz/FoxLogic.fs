@@ -8,12 +8,11 @@ open ISpotFinder
 type Boundaries = {
     Width: int
     Height: int
-    AvailableRight: int [,]
-    }
+    AvailableRight: int [,] }
 
 let updateBoundaries (forbiddenPixels:bool[,]) (minY, maxY) boundaries =
     let inline fill y start count value = 
-        if value then                   
+        if value then
             for i in count .. -1 .. 1 do boundaries.AvailableRight.[start+count-i, y] <- -i
         else
             for i in count .. -1 .. 1 do boundaries.AvailableRight.[start+count-i, y] <- i
@@ -52,11 +51,13 @@ type AddingState = {
      ForbiddenPixels: bool[,]
      Boundaries: Boundaries
      WordsSpots: Spot list
-     RemainingWords: (string * TextCandidate list) list
-     NextIterationWords: (string * TextCandidate list) list
+     RemainingWords: (string * Spot list) list
+     NextIterationWords: (string * Spot list) list
 }
 
-let findSpot boundaries (width, height) =
+let findSpot boundaries startSpot =
+    let width, height = startSpot.TextCandidate.Width, startSpot.TextCandidate.Height
+
     let rec spotOk (x,y) remaining =
         match remaining with
         | 0 -> true, 0
@@ -67,8 +68,8 @@ let findSpot boundaries (width, height) =
             else
                 false, available
 
-    let mutable x = 0
-    let mutable y = 0
+    let mutable x = startSpot.X
+    let mutable y = startSpot.Y
     let mutable found = false
     while y < boundaries.Height - height + 1 && not found do
         let ok, moveBy = spotOk (x,y) height
@@ -86,22 +87,21 @@ let findSpot boundaries (width, height) =
         None
 
 let addWord (state:AddingState) =
-    let word, textCandidates = state.RemainingWords.Head
+    let word, textCandidateSpots = state.RemainingWords.Head
 
-    let totalCandidatesCount = (state.RemainingWords @ state.NextIterationWords) |> List.collect snd |> List.length
-    
-    printfn "%s, remaining candidates = %d" word totalCandidatesCount
+    //let totalCandidatesCount = (state.RemainingWords @ state.NextIterationWords) |> List.collect snd |> List.length
+    //printfn "%s, remaining candidates = %d" word totalCandidatesCount
     
     let boundaries = state.Boundaries
 
     let spots = seq {
-        for textCandidate in textCandidates do
-            match findSpot boundaries (textCandidate.Width, textCandidate.Height) with
+        for textCandidateSpot in textCandidateSpots do
+            match findSpot boundaries textCandidateSpot with
             | Some (x, y) ->
                 yield {
                     X = x
                     Y = y
-                    TextCandidate = textCandidate
+                    TextCandidate = textCandidateSpot.TextCandidate
                 }
             | None -> ()
         }
@@ -114,7 +114,11 @@ let addWord (state:AddingState) =
                 for y in 0 .. spot.TextCandidate.Height - 1 do
                     state.ForbiddenPixels.[spot.X + x, spot.Y + y] <- state.ForbiddenPixels.[spot.X + x, spot.Y + y] || spot.TextCandidate.Pixels.[x, y]
 
-            let remainingCandidates = textCandidates |> List.skipWhile (fun c -> c <> spot.TextCandidate)
+            let remainingCandidates =
+                match textCandidateSpots |> List.skipWhile (fun c -> c.TextCandidate <> spot.TextCandidate) with
+                | [] -> []
+                | c :: cs -> spot :: cs
+
             let updatedBoundaries = state.Boundaries |> updateBoundaries state.ForbiddenPixels (spot.Y, spot.Y + spot.TextCandidate.Height - 1)
             
             {
@@ -171,4 +175,6 @@ let placeWords (targetColors: Color[,]) words shuffle =
 type FoxSpotFinder(shuffle:bool) =
     interface ISpotFinder with
         member x.FindSpots (targetColors: System.Drawing.Color[,]) (words: (string * TextCandidate list) list) =
-            placeWords targetColors words shuffle
+            let wordsPlacedAtStart =
+                words |> List.map (fun (word, candidates) -> word, candidates |> List.map (fun c -> { TextCandidate = c; X = 0; Y = 0}))
+            placeWords targetColors wordsPlacedAtStart shuffle
