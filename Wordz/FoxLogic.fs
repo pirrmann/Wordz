@@ -32,7 +32,7 @@ let groupConsecutive input = seq {
 let countFalse repetitions = seq {
     for (start, count, value) in repetitions do
         if value then
-            for i in count .. -1 .. 1 do yield -count
+            for i in count .. -1 .. 1 do yield -i
         else
             for i in count .. -1 .. 1 do yield i
     }
@@ -79,26 +79,23 @@ type AddingState = {
 let findSpot boundaries (width, height) =
     let rec spotOk (x,y) remaining =
         match remaining with
-        | 0 -> true
+        | 0 -> true, 0
         | remaining ->
             let available = boundaries.AvailableRight.[x, y]
             if available >= width then
                 spotOk (x, y+1) (remaining-1)
             else
-                false
+                false, available
 
     let mutable x = 0
     let mutable y = 0
     let mutable found = false
     while y < boundaries.Height - height + 1 && not found do
-        if spotOk (x,y) height then
+        let ok, moveBy = spotOk (x,y) height
+        if ok then
             found <- true
         else
-            let moveBy = boundaries.AvailableRight.[x, y]
-            if moveBy < width then
-                x <- x + (abs moveBy)
-            else
-                x <- x + 1
+            x <- x + (abs moveBy)
             if x >= boundaries.Width then
                 y <- y + 1
                 x <- 0
