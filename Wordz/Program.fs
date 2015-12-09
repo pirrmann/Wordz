@@ -58,7 +58,7 @@ let wordsWithOnlySmallCurrencies =
 let main argv =
     let sw = System.Diagnostics.Stopwatch.StartNew()
 
-    let spotsFinder = new DefaultLogic.DefaultSpotFinder(true)
+    let spotsFinder = new FoxLogic.FoxSpotFinder(true)
 
     System.IO.Directory.CreateDirectory(outputFolder) |> ignore
 
