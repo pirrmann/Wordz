@@ -32,7 +32,7 @@ let groupConsecutive input = seq {
 let countFalse repetitions = seq {
     for (start, count, value) in repetitions do
         if value then
-            for i in count .. -1 .. 1 do yield 0
+            for i in count .. -1 .. 1 do yield -count
         else
             for i in count .. -1 .. 1 do yield i
     }
@@ -90,13 +90,16 @@ let findSpot boundaries (width, height) =
     let mutable x = 0
     let mutable y = 0
     let mutable found = false
-    while y < boundaries.Height && not found do
+    while y < boundaries.Height - height + 1 && not found do
         if spotOk (x,y) height then
             found <- true
         else
-            if x < boundaries.Width-1 then
-                x <- x + 1
+            let moveBy = boundaries.AvailableRight.[x, y]
+            if moveBy < width then
+                x <- x + (abs moveBy)
             else
+                x <- x + 1
+            if x >= boundaries.Width then
                 y <- y + 1
                 x <- 0
 
@@ -105,7 +108,7 @@ let findSpot boundaries (width, height) =
     else
         None
 
-let addWord (targetColors: Color[,]) (state:AddingState) =
+let addWord (state:AddingState) =
     let word, textCandidates = state.RemainingWords.Head
 
     let totalCandidatesCount = (state.RemainingWords @ state.NextIterationWords) |> List.collect snd |> List.length
@@ -158,7 +161,7 @@ let rand =
     let r = new System.Random(42)
     fun () -> r.NextDouble()
 
-let rec addWords shuffle targetColors (state:AddingState) =
+let rec addWords shuffle (state:AddingState) =
     match state.RemainingWords, state.NextIterationWords with
     | [], [] -> state
     | [], nextIterationWords ->
@@ -170,15 +173,18 @@ let rec addWords shuffle targetColors (state:AddingState) =
 
         let state' = { state with RemainingWords = remainingWords
                                   NextIterationWords = [] }
-        addWords shuffle targetColors state'
+        addWords shuffle state'
     | _ ->
         //let w = System.Diagnostics.Stopwatch.StartNew ()
-        let state' = addWord targetColors state
+        let state' = addWord state
         //printfn "State evol : %O" w.Elapsed
-        addWords shuffle targetColors state'
+        addWords shuffle state'
+
+let makeForbidenPixels (colors: Color[,]) =
+    Array2D.init (colors.GetLength(0)) (colors.GetLength(1)) (fun x y -> colors.[x, y].A < 15uy)
 
 let placeWords (targetColors: Color[,]) words shuffle = 
-    let forbiddenPixels = Array2D.init (targetColors.GetLength(0)) (targetColors.GetLength(1)) (fun x y -> targetColors.[x, y].A < 15uy)
+    let forbiddenPixels = makeForbidenPixels targetColors
     let startingState =
         {
             ForbiddenPixels = forbiddenPixels
@@ -188,7 +194,7 @@ let placeWords (targetColors: Color[,]) words shuffle =
             NextIterationWords = words
         }
 
-    let finalState = addWords shuffle targetColors startingState
+    let finalState = addWords shuffle startingState
     finalState.WordsSpots
 
 type FoxSpotFinder(shuffle:bool) =
