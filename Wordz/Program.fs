@@ -21,7 +21,7 @@ let outputFolder = @"..\..\..\"
 
 let inputFile = "Sample.png"
 
-let testWith spotsFinder =
+let testWith spotsFinder colorPicker =
     let sw = System.Diagnostics.Stopwatch.StartNew()
 
     System.IO.Directory.CreateDirectory(outputFolder) |> ignore
@@ -36,7 +36,7 @@ let testWith spotsFinder =
         Output = FileInfo(outputFilePath)
         FontSizes = fontSizes
         Words = coolWords
-    } |> WordzGenerator.generate spotsFinder
+    } |> WordzGenerator.generate spotsFinder colorPicker
 
     sw.Elapsed
 
@@ -44,7 +44,7 @@ let testWith spotsFinder =
 let main argv =
     let sw = System.Diagnostics.Stopwatch.StartNew()
 
-    let fox = testWith (new FoxLogic.FoxSpotFinder(true))
+    let fox = testWith (new FoxLogic.FoxSpotFinder(true)) ColorPickers.AverageRgbColor
 
     printfn "Elapsed fox : %O" fox
     

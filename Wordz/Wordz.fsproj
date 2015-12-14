@@ -51,6 +51,7 @@
     <Compile Include="DrawingHelpers.fs" />
     <Compile Include="TextCandidates.fs" />
     <Compile Include="ISpotFinder.fs" />
+    <Compile Include="ColorPickers.fs" />
     <Compile Include="FoxLogic.fs" />
     <Compile Include="ImageGenerator.fs" />
     <Compile Include="WordzGenerator.fs" />

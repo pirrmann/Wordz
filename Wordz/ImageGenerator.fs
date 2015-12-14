@@ -6,7 +6,7 @@ open DrawingHelpers
 
 open ISpotFinder
 
-let generate (spotFinder:ISpotFinder) (inputFilePath:string, outputFilePath:string) words =
+let generate (spotFinder:ISpotFinder) (colorPicker:Color[,]->Spot->Color) (inputFilePath:string, outputFilePath:string) words =
     let target = Bitmap.FromFile(inputFilePath) :?> Bitmap
     let targetColors = getColors target
 
@@ -17,8 +17,8 @@ let generate (spotFinder:ISpotFinder) (inputFilePath:string, outputFilePath:stri
     g.TextRenderingHint <- Text.TextRenderingHint.AntiAlias
 
     for spot in wordsSpots do
-        let color = targetColors.[spot.X + spot.TextCandidate.Width / 2, spot.Y + spot.TextCandidate.Height / 2]
         use font = getFont spot.TextCandidate.FontSize
+        let color = colorPicker targetColors spot
         use brush = new SolidBrush(color)
         g.DrawString(spot.TextCandidate.Text, font, brush, single (spot.X - fst spot.TextCandidate.Offset), single (spot.Y - snd spot.TextCandidate.Offset))
         

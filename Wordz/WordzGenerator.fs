@@ -12,11 +12,11 @@ type TaskToProcess = {
 let buildWordSet task =
     task.Words |> List.map (fun word -> word, TextCandidates.buildTestCandidates word task.FontSizes)
 
-let generate spotsFinder task =
+let generate spotsFinder colorPicker task =
         let inputFilePath = task.Input.FullName
         let outputFilePath = task.Output.FullName
         let wordset = task |> buildWordSet
-        ImageGenerator.generate spotsFinder (inputFilePath, outputFilePath) wordset
+        ImageGenerator.generate spotsFinder colorPicker (inputFilePath, outputFilePath) wordset
 
 let readWordsFromFile filePath =
     System.IO.File.ReadAllLines(filePath) |> Seq.toList
